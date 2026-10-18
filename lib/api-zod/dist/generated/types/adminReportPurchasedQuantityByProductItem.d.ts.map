@@ -1,0 +1,1 @@
+{"version":3,"file":"adminReportPurchasedQuantityByProductItem.d.ts","sourceRoot":"","sources":["../../../src/generated/types/adminReportPurchasedQuantityByProductItem.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AAEH,MAAM,MAAM,yCAAyC,GAAG;IACtD,SAAS,EAAE,MAAM,CAAC;IAClB,WAAW,EAAE,MAAM,CAAC;IACpB,iBAAiB;IACjB,QAAQ,EAAE,MAAM,CAAC;CAClB,CAAC"}
