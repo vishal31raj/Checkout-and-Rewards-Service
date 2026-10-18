@@ -1,0 +1,1 @@
+- [OpenAPI request body schemas](openapi-codegen.md) — Use distinct named request schemas; inline body types collide with generated Zod exports.

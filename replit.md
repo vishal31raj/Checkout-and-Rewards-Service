@@ -1,15 +1,17 @@
-# [Project name]
+# Checkout and Rewards Service
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A PostgreSQL-backed checkout API with inventory-safe orders and milestone reward coupons.
 
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run test` — run PostgreSQL integration tests (`TEST_DATABASE_URL` required)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
+- Optional initial reward settings: `REWARD_ORDER_INTERVAL` and `REWARD_DISCOUNT_PERCENT`; persisted after first initialization and editable through the admin API
 
 ## Stack
 
@@ -22,15 +24,22 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/api-server/src/commerce/` — checkout, cart, coupon, reporting, and schema initialization
+- `lib/api-spec/openapi.yaml` — source of truth for the HTTP API contract
+- `README.md` — setup and endpoint reference
+- `DECISIONS.md` — invariants, trade-offs, and deferred production work
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Checkout effects are committed in one PostgreSQL transaction; row locks and unique constraints protect inventory, carts, idempotency keys, and coupons.
+- Cart reads and checkout use current product prices; orders preserve checkout-time item and total snapshots.
+- Use integer cents internally and decimal strings in JSON to avoid floating-point currency errors.
+- Reward defaults are inserted once; admin settings affect future coupon issuance while existing coupons keep their issued discount.
+- Admin operations intentionally have no authentication in this take-home; do not mistake them for production-ready authorization.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+The API supports product discovery, cart editing, safe checkout retries, order retrieval, milestone coupons, and a read-only revenue and redemption report.
 
 ## User preferences
 

@@ -15,7 +15,10 @@ async function buildAll() {
   await rm(distDir, { recursive: true, force: true });
 
   await esbuild({
-    entryPoints: [path.resolve(artifactDir, "src/index.ts")],
+    entryPoints: {
+      index: path.resolve(artifactDir, "src/index.ts"),
+      "tests/commerce.test": path.resolve(artifactDir, "src/tests/commerce.test.ts"),
+    },
     platform: "node",
     bundle: true,
     format: "esm",
@@ -29,6 +32,7 @@ async function buildAll() {
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
       "*.node",
+      "pg",
       "sharp",
       "better-sqlite3",
       "sqlite3",

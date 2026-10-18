@@ -2,21 +2,23 @@ openapi: 3.1.0
 info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
-  description: API specification
+  version: 1.0.0
+  description: Checkout, order, inventory, and rewards API.
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: catalog
+  - name: carts
+  - name: orders
+  - name: administration
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
-      summary: Health check
-      description: Returns server health status
+      summary: Check service health
       responses:
         "200":
           description: Healthy
@@ -24,13 +26,394 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /products:
+    get:
+      operationId: listProducts
+      tags: [catalog]
+      summary: List active products
+      responses:
+        "200":
+          description: Product catalog
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products:
+                    type: array
+                    items: { $ref: "#/components/schemas/Product" }
+                required: [products]
+  /carts:
+    post:
+      operationId: createCart
+      tags: [carts]
+      summary: Create an empty cart
+      responses:
+        "201":
+          description: Cart created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+  /carts/{cartId}:
+    parameters:
+      - $ref: "#/components/parameters/CartId"
+    get:
+      operationId: getCart
+      tags: [carts]
+      summary: Retrieve a cart and current catalog prices
+      responses:
+        "200":
+          description: Cart
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /carts/{cartId}/items:
+    parameters:
+      - $ref: "#/components/parameters/CartId"
+    post:
+      operationId: addCartItem
+      tags: [carts]
+      summary: Add a quantity to a cart line
+      description: Adds to the existing quantity when the product is already in the cart.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CartItemInput"
+      responses:
+        "200":
+          description: Updated cart
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /carts/{cartId}/items/{productId}:
+    parameters:
+      - $ref: "#/components/parameters/CartId"
+      - $ref: "#/components/parameters/ProductId"
+    put:
+      operationId: updateCartItem
+      tags: [carts]
+      summary: Set a cart line quantity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CartItemQuantityUpdate"
+      responses:
+        "200":
+          description: Updated cart
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      operationId: removeCartItem
+      tags: [carts]
+      summary: Remove a product from a cart
+      responses:
+        "200":
+          description: Updated cart
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Cart" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /carts/{cartId}/checkout:
+    parameters:
+      - $ref: "#/components/parameters/CartId"
+      - name: Idempotency-Key
+        in: header
+        required: true
+        description: Stable key to reuse when retrying the same checkout.
+        schema: { type: string, minLength: 1, maxLength: 200 }
+    post:
+      operationId: checkoutCart
+      tags: [carts, orders]
+      summary: Check out a cart
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutInput"
+      responses:
+        "201":
+          description: Order placed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "200":
+          description: Previously completed checkout returned for a retry
+          headers:
+            Idempotent-Replay:
+              schema: { type: string, const: "true" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /orders/{orderId}:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getOrder
+      tags: [orders]
+      summary: Retrieve an order and its purchase snapshots
+      responses:
+        "200":
+          description: Order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /admin/rewards/config:
+    get:
+      operationId: getRewardConfig
+      tags: [administration]
+      summary: Get reward milestone settings
+      responses:
+        "200":
+          description: Current settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RewardConfig" }
+    put:
+      operationId: updateRewardConfig
+      tags: [administration]
+      summary: Set reward milestone settings for future coupon generation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RewardConfigUpdate"
+      responses:
+        "200":
+          description: Updated settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RewardConfig" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+  /admin/coupons/generate:
+    post:
+      operationId: generateCoupon
+      tags: [administration]
+      summary: Generate the next eligible milestone coupon
+      responses:
+        "200":
+          description: Coupon generated, or no unrewarded milestone is eligible
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  coupon:
+                    oneOf:
+                      - { $ref: "#/components/schemas/Coupon" }
+                      - { type: "null" }
+                  eligibleOrderCount: { type: integer, minimum: 0 }
+                required: [coupon, eligibleOrderCount]
+  /admin/report:
+    get:
+      operationId: getAdminReport
+      tags: [administration]
+      summary: Get a read-only reconciliation report
+      responses:
+        "200":
+          description: Totals derived from placed orders and coupons
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminReport" }
 components:
+  parameters:
+    CartId:
+      name: cartId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 80 }
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Conflict:
+      description: Business rule or concurrency conflict
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
   schemas:
     HealthStatus:
       type: object
       properties:
-        status:
-          type: string
-      required:
-        - status
-
+        status: { type: string, example: ok }
+      required: [status]
+    CartItemInput:
+      type: object
+      properties:
+        productId: { type: string, minLength: 1, maxLength: 80 }
+        quantity: { type: integer, minimum: 1, maximum: 100000 }
+      required: [productId, quantity]
+    CartItemQuantityUpdate:
+      type: object
+      properties:
+        quantity: { type: integer, minimum: 1, maximum: 100000 }
+      required: [quantity]
+    CheckoutInput:
+      type: object
+      properties:
+        couponCode: { type: string, minLength: 1, maxLength: 80 }
+    RewardConfigUpdate:
+      type: object
+      properties:
+        ordersPerCoupon: { type: integer, minimum: 1, maximum: 100000 }
+        discountPercent: { type: integer, minimum: 1, maximum: 100 }
+      required: [ordersPerCoupon, discountPercent]
+    PurchasedProductSummary:
+      type: object
+      properties:
+        productId: { type: string }
+        productName: { type: string }
+        quantity: { type: integer, minimum: 0 }
+      required: [productId, productName, quantity]
+    Product:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        unitPriceCents: { $ref: "#/components/schemas/Cents" }
+        inventory: { type: integer, minimum: 0 }
+        currency: { type: string, const: USD }
+      required: [id, name, unitPriceCents, inventory, currency]
+    CartItem:
+      type: object
+      properties:
+        productId: { type: string }
+        productName: { type: string }
+        unitPriceCents: { $ref: "#/components/schemas/Cents" }
+        quantity: { type: integer, minimum: 1 }
+        lineTotalCents: { $ref: "#/components/schemas/Cents" }
+        availableInventory: { type: integer, minimum: 0 }
+        active: { type: boolean }
+      required: [productId, productName, unitPriceCents, quantity, lineTotalCents, availableInventory, active]
+    Cart:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [open, checked_out] }
+        createdAt: { type: string, format: date-time }
+        checkedOutAt: { type: [string, "null"], format: date-time }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CartItem" }
+        subtotalCents: { $ref: "#/components/schemas/Cents" }
+        currency: { type: string, const: USD }
+      required: [id, status, createdAt, items, subtotalCents, currency]
+    OrderItem:
+      type: object
+      properties:
+        productId: { type: string }
+        productName: { type: string }
+        unitPriceCents: { $ref: "#/components/schemas/Cents" }
+        quantity: { type: integer, minimum: 1 }
+        lineTotalCents: { $ref: "#/components/schemas/Cents" }
+      required: [productId, productName, unitPriceCents, quantity, lineTotalCents]
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        cartId: { type: string, format: uuid }
+        currency: { type: string, const: USD }
+        subtotalCents: { $ref: "#/components/schemas/Cents" }
+        discountCents: { $ref: "#/components/schemas/Cents" }
+        totalCents: { $ref: "#/components/schemas/Cents" }
+        coupon:
+          oneOf:
+            - type: object
+              properties:
+                code: { type: string }
+                discountPercent: { type: integer, minimum: 1, maximum: 100 }
+              required: [code, discountPercent]
+            - { type: "null" }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/OrderItem" }
+        createdAt: { type: string, format: date-time }
+      required: [id, cartId, currency, subtotalCents, discountCents, totalCents, coupon, items, createdAt]
+    Coupon:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        milestoneOrderCount: { type: integer, minimum: 1 }
+        discountPercent: { type: integer, minimum: 1, maximum: 100 }
+        status: { type: string, enum: [available, redeemed] }
+        createdAt: { type: string, format: date-time }
+      required: [id, code, milestoneOrderCount, discountPercent, status, createdAt]
+    RewardConfig:
+      type: object
+      properties:
+        ordersPerCoupon: { type: integer, minimum: 1 }
+        discountPercent: { type: integer, minimum: 1, maximum: 100 }
+      required: [ordersPerCoupon, discountPercent]
+    AdminReport:
+      type: object
+      properties:
+        totalOrders: { $ref: "#/components/schemas/Count" }
+        grossRevenueCents: { $ref: "#/components/schemas/Cents" }
+        totalDiscountsCents: { $ref: "#/components/schemas/Cents" }
+        netRevenueCents: { $ref: "#/components/schemas/Cents" }
+        purchasedQuantityByProduct:
+          type: array
+          items: { $ref: "#/components/schemas/PurchasedProductSummary" }
+        coupons:
+          type: object
+          properties:
+            generated: { $ref: "#/components/schemas/Count" }
+            available: { $ref: "#/components/schemas/Count" }
+            redeemed: { $ref: "#/components/schemas/Count" }
+          required: [generated, available, redeemed]
+        currency: { type: string, const: USD }
+      required: [totalOrders, grossRevenueCents, totalDiscountsCents, netRevenueCents, purchasedQuantityByProduct, coupons, currency]
+    Cents:
+      type: string
+      pattern: "^[0-9]+$"
+      description: Exact integer minor-unit amount, represented as a decimal string.
+      example: "1299"
+    Count:
+      type: string
+      pattern: "^[0-9]+$"
+      description: Exact non-negative count, represented as a decimal string.
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+          required: [code, message]
+      required: [error]
